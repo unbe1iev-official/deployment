@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-cosign
+  namespace: harbor
+  labels:
+    app: harbor-cosign
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: "harbor"
+    meta.helm.sh/release-namespace: "harbor"
+spec:
+  serviceName: "harbor-cosign-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harbor-cosign
+  template:
+    metadata:
+      labels:
+        app: harbor-cosign
+    spec:
+      containers:
+        - name: harbor-cosign
+          image: bitnami/cosign:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: cosign-keys
+              mountPath: /etc/cosign
+              readOnly: true
+            - name: cosign-pvc
+              mountPath: /mnt/data
+          command: ["sleep", "infinity"]
+      volumes:
+        - name: cosign-keys
+          secret:
+            secretName: harbor-cosign-keys
+        - name: cosign-pvc
+          persistentVolumeClaim:
+            claimName: harbor-cosign-pvc
+      imagePullSecrets:
+        - name: harbor-registry-secret

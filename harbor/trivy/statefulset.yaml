@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-trivy
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: "harbor"
+    component: trivy
+spec:
+  replicas: 1
+  serviceName: harbor-trivy
+  selector:
+    matchLabels:
+      release: harbor
+      app: "harbor"
+      component: trivy
+  template:
+    metadata:
+      labels:
+        heritage: Helm
+        release: harbor
+        chart: harbor
+        app: "harbor"
+        component: trivy
+    spec:
+      securityContext:
+        runAsUser: 10000
+        fsGroup: 10000
+      automountServiceAccountToken: false
+      initContainers:
+      - name: init-permissions
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Checking permissions and ownership:";
+            ls -ld /mnt/data/harbor/trivy /home/scanner/.cache/trivy /home/scanner/.cache/reports;
+            mkdir -p /home/scanner/.cache/trivy;
+            mkdir -p /home/scanner/.cache/reports;
+            chown -R 10000:10000 /mnt/data/harbor/trivy;
+            chown -R 10000:10000 /home/scanner/.cache;
+            chmod -R 700 /mnt/data/harbor/trivy;
+            chmod -R 700 /home/scanner/.cache;
+            echo "Permissions after change:";
+            ls -ld /mnt/data/harbor/trivy /home/scanner/.cache/trivy /home/scanner/.cache/reports;
+            ls -l /mnt/data/harbor/trivy;
+            ls -l /home/scanner/.cache/trivy;
+            ls -l /home/scanner/.cache/reports;
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        volumeMounts:
+        - name: trivy-data
+          mountPath: /mnt/data/harbor/trivy
+        - name: trivy-cache
+          mountPath: /home/scanner/.cache
+      containers:
+      - name: trivy
+        image: goharbor/trivy-adapter-photon:v2.10.2
+        args: ["server", "--tls", "--cert", "/etc/harbor/ssl/tls.crt", "--key", "/etc/harbor/ssl/tls.key"]
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: trivy-data
+          mountPath: /mnt/data/harbor/trivy
+        - name: trivy-cache
+          mountPath: /home/scanner/.cache
+        - name: tls-cert
+          mountPath: /etc/harbor/ssl/tls.crt
+          subPath: tls.crt
+        - name: tls-key
+          mountPath: /etc/harbor/ssl/tls.key
+          subPath: tls.key
+        env:
+        - name: TRIVY_SEVERITY
+          value: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+        - name: TRIVY_IGNORE_UNFIXED
+          value: "true"
+        - name: TRIVY_VULN_TYPE
+          value: "os,library"
+        - name: TRIVY_OFFLINE_SCAN
+          value: "true"
+        - name: TLS_CERT_FILE
+          value: "/etc/harbor/ssl/tls.crt"
+        - name: TLS_KEY_FILE
+          value: "/etc/harbor/ssl/tls.key"
+        - name: SCANNER_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: harbor-trivy
+              key: redisURL
+      volumes:
+      - name: trivy-data
+        persistentVolumeClaim:
+          claimName: harbor-trivy-pvc
+      - name: trivy-cache
+        emptyDir: {}
+      - name: tls-cert
+        secret:
+          secretName: harbor-tls
+          items:
+          - key: tls.crt
+            path: tls.crt
+      - name: tls-key
+        secret:
+          secretName: harbor-tls
+          items:
+          - key: tls.key
+            path: tls.key

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "harbor-portal"
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: "harbor"
+    component: portal
+spec:
+  replicas: 1
+  serviceName: harbor-portal
+  selector:
+    matchLabels:
+      release: harbor
+      app: "harbor"
+      component: portal
+  template:
+    metadata:
+      labels:
+        release: harbor
+        app: "harbor"
+        component: portal
+      annotations:
+        checksum/configmap: 81e3c496ae5701420a27d38fd5d8a908c1ba48909fbc7d774e6325c925e5b224
+    spec:
+      securityContext:
+        runAsUser: 10000
+        fsGroup: 10000
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      containers:
+      - name: portal
+        image: goharbor/harbor-portal:v2.10.2
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 300
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 10
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: portal-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: tls-crt
+          mountPath: /etc/harbor/ssl/tls.crt
+          subPath: tls.crt
+        - name: tls-key
+          mountPath: /etc/harbor/ssl/tls.key
+          subPath: tls.key
+      volumes:
+      - name: portal-config
+        configMap:
+          name: "harbor-portal"
+      - name: tls-crt
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.crt
+              path: tls.crt
+      - name: tls-key
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.key
+              path: tls.key

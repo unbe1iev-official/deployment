@@ -1,0 +1,10 @@
+{
+  "auths": {
+    "harbor.unbe1iev.com": {
+      "username": "admin",
+      "password": "",
+      "email": "info@unbe1iev.com",
+      "auth": ""
+    }
+  }
+}

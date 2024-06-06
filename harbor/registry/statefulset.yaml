@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-registry
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: "harbor"
+    component: registry
+spec:
+  serviceName: harbor-registry
+  replicas: 1
+  selector:
+    matchLabels:
+      release: harbor
+      app: "harbor"
+      component: registry
+  template:
+    metadata:
+      labels:
+        heritage: Helm
+        release: harbor
+        chart: harbor
+        app: "harbor"
+        component: registry
+    spec:
+      containers:
+        - name: registry
+          image: goharbor/registry-photon:v2.10.2
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: registry-data
+              mountPath: /storage
+            - name: registry-config
+              mountPath: /etc/registry/config.yml
+              subPath: config.yml
+          envFrom:
+            - secretRef:
+                name: harbor-registry
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harbor-registry
+                  key: REDIS_URL
+      volumes:
+        - name: registry-data
+          persistentVolumeClaim:
+            claimName: harbor-registry-pvc
+        - name: registry-config
+          configMap:
+            name: harbor-registry

@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "harbor-jobservice"
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: "harbor"
+    component: jobservice
+spec:
+  replicas: 1
+  serviceName: harbor-jobservice
+  selector:
+    matchLabels:
+      release: harbor
+      app: "harbor"
+      component: jobservice
+  template:
+    metadata:
+      labels:
+        heritage: Helm
+        release: harbor
+        chart: harbor
+        app: "harbor"
+        component: jobservice
+      annotations:
+        checksum/configmap: cc0e1292cee3c8425c958aeee30046a701a7b3e32ce7b5d3751cceebea93e2f3
+        checksum/configmap-env: 52de7676d9ac66bda6ec9e57e3274d89d9b22ddea971c927ebb81964b680f5df
+        checksum/secret: 6b4e9dbcdea1d0bbc28a1b59ba5fc2f68a44edbe1177e8b0bbf20d8f8c2b13be
+        checksum/secret-core: 8f1217c3aaecb60ef117c567e95f5ff50386a60a370fb39660f5ad290c35d489
+    spec:
+      securityContext:
+        runAsUser: 10000
+        fsGroup: 10000
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      initContainers:
+      - name: init-permissions
+        image: alpine
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Checking /var/log/jobs permissions";
+            ls -ld /var/log/jobs;
+            ls -l /var/log/jobs;
+            chown -R 10000:10000 /var/log/jobs;
+            chmod -R 700 /var/log/jobs;
+            echo "Permissions changed";
+            ls -ld /var/log/jobs;
+            ls -l /var/log/jobs;
+        volumeMounts:
+        - name: job-logs
+          mountPath: /var/log/jobs
+      - name: check-harbor-core
+        image: busybox
+        command: ['sh', '-c']
+        args:
+          - |
+            until nc -z harbor-core 80; do
+              echo "Waiting for harbor-core to be available...";
+              sleep 2;
+            done;
+            echo "harbor-core is available!";
+      containers:
+      - name: jobservice
+        image: goharbor/harbor-jobservice:v2.10.2
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /api/v1/stats
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 300
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/stats
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        env:
+          - name: CORE_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: harbor-jobservice
+                key: CORE_SECRET
+          - name: JOBSERVICE_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: harbor-jobservice
+                key: secretKey
+          - name: REGISTRY_CREDENTIAL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: harbor-jobservice
+                key: REGISTRY_PASSWD
+        envFrom:
+        - configMapRef:
+            name: "harbor-jobservice-env"
+        - secretRef:
+            name: "harbor-jobservice"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: jobservice-config
+          mountPath: /etc/jobservice/config.yml
+          subPath: config.yml
+        - name: job-logs
+          mountPath: /var/log/jobs
+        - name: tls-crt
+          mountPath: /etc/harbor/ssl/tls.crt
+          subPath: tls.crt
+        - name: tls-key
+          mountPath: /etc/harbor/ssl/tls.key
+          subPath: tls.key
+      volumes:
+      - name: jobservice-config
+        configMap:
+          name: "harbor-jobservice"
+      - name: job-logs
+        persistentVolumeClaim:
+          claimName: harbor-jobservice
+      - name: tls-crt
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.crt
+              path: tls.crt
+      - name: tls-key
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.key
+              path: tls.key

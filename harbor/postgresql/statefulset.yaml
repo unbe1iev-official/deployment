@@ -1,0 +1,138 @@
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-postgresql
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: harbor
+    component: postgresql
+spec:
+  replicas: 1
+  serviceName: harbor-postgresql
+  selector:
+    matchLabels:
+      release: harbor
+      app: harbor
+      component: postgresql
+  template:
+    metadata:
+      labels:
+        heritage: Helm
+        release: harbor
+        chart: harbor
+        app: harbor
+        component: postgresql
+      annotations:
+        checksum/secret: 9a2db90d6406c99a29e9a7b94905bc80858387ce54996e48439b77ecdabbd80d
+    spec:
+      securityContext:
+        runAsUser: 999
+        fsGroup: 999
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      initContainers:
+      - name: data-migrator
+        image: goharbor/harbor-db:v2.10.2
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh"]
+        args: ["-c", "[ -e /var/lib/postgresql/data/postgresql.conf ] && [ ! -d /var/lib/postgresql/data/pgdata ] && mkdir -m 0700 /var/lib/postgresql/data/pgdata && mv /var/lib/postgresql/data/* /var/lib/postgresql/data/pgdata/ || true"]
+        volumeMounts:
+          - name: database-data
+            mountPath: /var/lib/postgresql/data
+            subPath: ""
+      - name: data-permissions-ensurer
+        image: goharbor/harbor-db:v2.10.2
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh"]
+        args: ["-c", "chown -R 999:999 /var/lib/postgresql/data && chmod -R 700 /var/lib/postgresql/data/pgdata || true"]
+        volumeMounts:
+          - name: database-data
+            mountPath: /var/lib/postgresql/data
+            subPath: ""
+      - name: configure-postgresql
+        image: busybox
+        command: ["/bin/sh", "-c", "echo 'ssl = on' >> /var/lib/postgresql/data/postgresql.conf && echo 'ssl_cert_file = \"/etc/harbor/ssl/tls.crt\"' >> /var/lib/postgresql/data/postgresql.conf && echo 'ssl_key_file = \"/etc/harbor/ssl/tls.key\"' >> /var/lib/postgresql/data/postgresql.conf && echo 'ssl_ca_file = \"/etc/harbor/ssl/ca.crt\"' >> /var/lib/postgresql/data/postgresql.conf"]
+        volumeMounts:
+          - name: database-data
+            mountPath: /var/lib/postgresql/data
+          - name: tls-cert
+            mountPath: /etc/harbor/ssl
+      - name: configure-pg-hba
+        image: busybox
+        command: ["/bin/sh", "-c", "echo 'hostssl all all 0.0.0.0/0 md5 clientcert=1' >> /var/lib/postgresql/data/pg_hba.conf"]
+        volumeMounts:
+          - name: database-data
+            mountPath: /var/lib/postgresql/data
+      containers:
+      - name: postgresql
+        image: goharbor/harbor-db:v2.10.2
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /docker-healthcheck.sh
+          initialDelaySeconds: 300
+          periodSeconds: 10
+          timeoutSeconds: 1
+        readinessProbe:
+          exec:
+            command:
+            - /docker-healthcheck.sh
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          timeoutSeconds: 1
+        envFrom:
+          - secretRef:
+              name: harbor-postgresql-secret
+        env:
+          - name: PGDATA
+            value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: database-data
+          mountPath: /var/lib/postgresql/data
+          subPath: ""
+        - name: shm-volume
+          mountPath: /dev/shm
+        - name: tls-cert
+          mountPath: /etc/harbor/ssl/tls.crt
+          subPath: tls.crt
+        - name: tls-key
+          mountPath: /etc/harbor/ssl/tls.key
+          subPath: tls.key
+        - name: ca-cert
+          mountPath: /etc/harbor/ssl/ca.crt
+          subPath: ca.crt
+      volumes:
+      - name: shm-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+      - name: database-data
+        persistentVolumeClaim:
+          claimName: harbor-postgresql-pvc
+      - name: tls-cert
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.crt
+              path: tls.crt
+      - name: tls-key
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.key
+              path: tls.key
+      - name: ca-cert
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: ca.crt
+              path: ca.crt

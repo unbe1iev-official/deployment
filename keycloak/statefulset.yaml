@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak
+  namespace: unbe1iev-sso
+spec:
+  serviceName: "keycloak"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: harbor.unbe1iev.com/unbe1iev-dev/keycloak:24.0.4
+        command: ["/opt/keycloak/bin/kc.sh", "start", "--optimized"]
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8443
+          name: https
+        env:
+        - name: KEYCLOAK_ADMIN
+          value: admin
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          value: ""
+        - name: KC_DB
+          value: mariadb
+        - name: KC_DB_URL
+          value: jdbc:mariadb://mariadb:3306/keycloak
+        - name: KC_DB_USERNAME
+          value: keycloak
+        - name: KC_DB_PASSWORD
+          value: ""
+        - name: KC_HTTPS_CERTIFICATE_FILE
+          value: /opt/keycloak/conf/tls.crt
+        - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+          value: /opt/keycloak/conf/tls.key
+        - name: KC_HOSTNAME
+          value: sso.unbe1iev.com
+        - name: QUARKUS_TRANSACTION_MANAGER_ENABLE_RECOVERY
+          value: "true"
+        - name: JAVA_OPTS
+          value: "-Dquarkus.log.level=DEBUG -Djava.util.logging.ConsoleHandler.level=FINE"
+        - name: KC_PROXY
+          value: edge
+        - name: SPI_EVENTS_LISTENER_CUSTOM_EVENT_LISTENER_CALLBACK_ENDPOINT
+          value: http://callback.unbe1iev-dev.svc.cluster.local:8000/api/keycloak/events
+        volumeMounts:
+        - name: keycloak-pvc
+          mountPath: /opt/keycloak/data
+        - name: keycloak-certificates
+          mountPath: /opt/keycloak/conf
+          readOnly: true
+        - name: keycloak-transaction-logs
+          mountPath: /opt/keycloak/data/transaction-logs
+        - name: keycloak-tmp
+          mountPath: /opt/keycloak/data/tmp
+          subPath: tmp
+      imagePullSecrets:
+      - name: harbor-secret
+      volumes:
+      - name: keycloak-certificates
+        secret:
+          secretName: sso-unbe1iev-com-tls
+      - name: keycloak-pvc
+        persistentVolumeClaim:
+          claimName: keycloak-pvc
+      - name: keycloak-transaction-logs
+        emptyDir: {}
+      - name: keycloak-tmp
+        emptyDir: {}
+

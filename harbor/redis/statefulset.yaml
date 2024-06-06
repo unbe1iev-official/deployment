@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-redis
+  namespace: harbor
+  labels:
+    heritage: Helm
+    release: harbor
+    chart: harbor
+    app: "harbor"
+    component: redis
+spec:
+  replicas: 1
+  serviceName: harbor-redis
+  selector:
+    matchLabels:
+      release: harbor
+      app: "harbor"
+      component: redis
+  template:
+    metadata:
+      labels:
+        heritage: Helm
+        release: harbor
+        chart: harbor
+        app: "harbor"
+        component: redis
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      initContainers:
+      - name: init-permissions
+        image: alpine
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Checking /var/lib/redis permissions";
+            ls -ld /var/lib/redis;
+            ls -l /var/lib/redis;
+            chown -R 1000:1000 /var/lib/redis;
+            chmod -R 700 /var/lib/redis;
+            echo "Permissions changed";
+            ls -ld /var/lib/redis;
+            ls -l /var/lib/redis;
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          privileged: true
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/redis
+      containers:
+      - name: redis
+        image: goharbor/redis-photon:v2.10.2
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 300
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 1
+          periodSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/redis
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: harbor-redis-pvc
+      - name: tls-crt
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.crt
+              path: tls.crt
+      - name: tls-key
+        secret:
+          secretName: harbor-tls
+          items:
+            - key: tls.key
+              path: tls.key
