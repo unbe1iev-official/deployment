@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unbe1iev-callback-ingress
+  namespace: unbe1iev-dev
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.unbe1iev.com
+    secretName: unbe1iev-com-tls
+  rules:
+  - host: api.unbe1iev.com
+    http:
+      paths:
+      - path: /api-callback(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: unbe1iev-callback
+            port:
+              number: 8000

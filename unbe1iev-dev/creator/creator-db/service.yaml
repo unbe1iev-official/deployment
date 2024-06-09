@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: unbe1iev-creator-db
+  namespace: unbe1iev-dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: creator-db
+  ports:
+    - protocol: TCP
+      port: 3301
+      targetPort: 3306

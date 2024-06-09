@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: unbe1iev-callback
+  namespace: unbe1iev-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: callback
+  template:
+    metadata:
+      labels:
+        app: callback
+    spec:
+      containers:
+      - name: callback
+        image: harbor.unbe1iev.com/unbe1iev-dev/callback:1.0.0
+        ports:
+        - containerPort: 8000
+        env:
+        - name: CALLBACK_BACKEND_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: unbe1iev-callback-secret
+              key: CALLBACK_BACKEND_CLIENT_SECRET
+        - name: CUSTOM_EVENT_LISTENER_SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: unbe1iev-callback-secret
+              key: CUSTOM_EVENT_LISTENER_SHARED_SECRET
+        - name: KEYCLOAK_AUTH_SERVER_URL
+          valueFrom:
+            secretKeyRef:
+              name: unbe1iev-callback-secret
+              key: KEYCLOAK_AUTH_SERVER_URL
+        - name: FEIGN_CREATOR_URL
+          value: "http://creator.unbe1iev-dev.svc.cluster.local:8001"
+        - name: SECURITY_TRUSTED_ISSUERS
+          value: "https://sso.unbe1iev.com/realms/unbe1iev"
+      imagePullSecrets:
+      - name: unbe1iev-docker-login

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: unbe1iev-creator-db-pvc
+  namespace: unbe1iev-dev
+  labels:
+    app: creator-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: manual
+  selector:
+    matchLabels:
+      app: creator-db

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: unbe1iev-creator-db
+  namespace: unbe1iev-dev
+spec:
+  serviceName: "creator-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: creator-db
+  template:
+    metadata:
+      labels:
+        app: creator-db
+    spec:
+      containers:
+      - name: mariadb
+        image: mariadb:latest
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MARIADB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unbe1iev-creator-db-secret
+              key: MARIADB_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          value: "creator"
+        - name: MYSQL_USER
+          value: "creator"
+        - name: MARIADB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unbe1iev-creator-db-secret
+              key: MARIADB_PASSWORD
+        volumeMounts:
+        - name: unbe1iev-creator-db-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: unbe1iev-creator-db-storage
+        persistentVolumeClaim:
+          claimName: unbe1iev-creator-db-pvc
